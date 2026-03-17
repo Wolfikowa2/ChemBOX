@@ -8,18 +8,16 @@ pygame.init()
 
 WIDTH, HEIGHT = 1400, 900
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("ChemSandbox - Web Optimized 3D Engine")
+pygame.display.set_caption("ChemSandbox - Android a Web Optimalizace")
 clock = pygame.time.Clock()
 
-# Zabudovane fonty pro bezpecny chod na webu a tabletech
-font_tiny = pygame.font.Font(None, 16)
-font_small = pygame.font.Font(None, 20)
-font_medium = pygame.font.Font(None, 24)
-font_large = pygame.font.Font(None, 34)
-font_element = pygame.font.Font(None, 28)
-font_alert = pygame.font.Font(None, 30)
+font_tiny = pygame.font.Font(None, 18)
+font_small = pygame.font.Font(None, 22)
+font_medium = pygame.font.Font(None, 26)
+font_large = pygame.font.Font(None, 36)
+font_element = pygame.font.Font(None, 30)
+font_alert = pygame.font.Font(None, 32)
 
-# Vylepsena paleta barev
 BG_COLOR_CENTER = (30, 35, 45)
 BG_COLOR_EDGE = (10, 12, 15)
 GRID_COLOR = (45, 50, 60)
@@ -81,13 +79,16 @@ MODE_2D = 0
 MODE_3D = 1
 
 def generate_vignette_bg(width, height):
-    """Vygeneruje moderni prechodove pozadi jednou pri startu"""
-    bg = pygame.Surface((width, height))
-    cx, cy = width // 2, height // 2
+    # KRITICKA OPTIMALIZACE PRO WEB A ANDROID:
+    # Pozadi se pocita v miniaturnim rozliseni 14x9 pixelu a pak se chytre roztahne.
+    # To resi problem se zasekavanim prohlizece pri nacitani stranky.
+    small_w, small_h = width // 100, height // 100
+    bg = pygame.Surface((small_w, small_h))
+    cx, cy = small_w // 2, small_h // 2
     max_dist = math.hypot(cx, cy)
     
-    for y in range(height):
-        for x in range(width):
+    for y in range(small_h):
+        for x in range(small_w):
             dist = math.hypot(x - cx, y - cy)
             ratio = min(1.0, dist / max_dist)
             
@@ -96,7 +97,9 @@ def generate_vignette_bg(width, height):
             b = int(BG_COLOR_CENTER[2] * (1 - ratio) + BG_COLOR_EDGE[2] * ratio)
             
             bg.set_at((x, y), (r, g, b))
-    return bg
+            
+    # Hladke roztazeni na celou obrazovku
+    return pygame.transform.smoothscale(bg, (width, height))
 
 def get_bond_order(b_type):
     if b_type == 2: return 2
@@ -144,7 +147,6 @@ class Atom:
         self.shape_name = "Nedefinovano"
         self.lone_pairs = 0
         self.steric_number = 0
-        self.electron_angles = [random.uniform(0, math.pi*2) for _ in range(self.valence)]
         
     def get_screen_pos(self, cam_x, cam_y, mode, view_rot_x, view_rot_y):
         if mode == MODE_2D:
@@ -199,23 +201,22 @@ class Sandbox:
         self.show_analysis = False
         self.analysis_text = []
 
+        # Tlacitka jsou o neco sirsi a vyssi pro lepsi ovladani prstem
         self.ui_buttons = [
-            pygame.Rect(10, 10, 140, 40),
-            pygame.Rect(10, 60, 140, 40),
-            pygame.Rect(10, 110, 140, 40),
-            pygame.Rect(10, 160, 140, 40)
+            pygame.Rect(10, 15, 160, 50),
+            pygame.Rect(10, 75, 160, 50),
+            pygame.Rect(10, 135, 160, 50),
+            pygame.Rect(10, 195, 160, 50)
         ]
-        self.ui_labels = ["Kurzor", "Posun Kamery", "Pridat Atom", "Vazba"]
+        self.ui_labels = ["Kurzor", "Kamera", "Novy Atom", "Vazba"]
         self.ui_tools = [TOOL_CURSOR, TOOL_PAN, TOOL_ADD_ATOM, TOOL_ADD_BOND]
-        self.btn_ptable = pygame.Rect(10, 220, 140, 100)
+        self.btn_ptable = pygame.Rect(10, 260, 160, 100)
         
-        self.btn_mode = pygame.Rect(10, HEIGHT - 70, 140, 50)
-        self.btn_analysis = pygame.Rect(10, HEIGHT - 130, 140, 50)
-        self.btn_electrons = pygame.Rect(10, HEIGHT - 190, 140, 50)
+        self.btn_mode = pygame.Rect(10, HEIGHT - 75, 160, 55)
+        self.btn_analysis = pygame.Rect(10, HEIGHT - 140, 160, 55)
+        self.btn_electrons = pygame.Rect(10, HEIGHT - 205, 160, 55)
 
-        # Vygenerovani statickeho pozadi
         self.static_bg = generate_vignette_bg(WIDTH, HEIGHT)
-        # Jednorazove vytvoreni pruhledne vrstvy (masivni optimalizace pro Web)
         self.alpha_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
 
     def show_alert(self, text):
@@ -280,13 +281,13 @@ class Sandbox:
                 a.shape_name = "Linearni tvar"
             elif a.steric_number == 3:
                 a.hybridization = "sp2"
-                a.shape_name = "Planarni trojuhelnik / Lomeny tvar"
+                a.shape_name = "Planarni / Lomeny"
             elif a.steric_number == 4:
                 a.hybridization = "sp3"
-                a.shape_name = "Tetraedr / Pyramida / Lomeny"
+                a.shape_name = "Tetraedr / Pyramida"
             elif a.steric_number == 5:
                 a.hybridization = "sp3d"
-                a.shape_name = "Trigonalni bipyramida"
+                a.shape_name = "Bipyramida"
             else:
                 a.hybridization = "sp3d2"
                 a.shape_name = "Oktaedr"
@@ -294,14 +295,15 @@ class Sandbox:
     def apply_physics(self):
         self.calculate_chemistry()
 
+        # Elektromagneticke odpuzovani optimalizovano pro mobilni zarizeni
         for i in range(len(self.atoms)):
             for j in range(i+1, len(self.atoms)):
                 a1, a2 = self.atoms[i], self.atoms[j]
                 dx, dy, dz = a2.x - a1.x, a2.y - a1.y, a2.z - a1.z
                 dist_sq = dx*dx + dy*dy + dz*dz
                 
-                # Optimalizace: Pokud jsou atomy moc daleko, nepocitame odpuzovani
-                if dist_sq > 60000: continue
+                # Zpracovavame jen ty atomy, ktere jsou relativne blizko u sebe
+                if dist_sq > 50000: continue
                 
                 dist = math.sqrt(dist_sq)
                 if dist < 0.1: dist = 0.1
@@ -326,6 +328,7 @@ class Sandbox:
                     if not a1.is_dragged: a1.vx -= fx/a1.mass; a1.vy -= fy/a1.mass; a1.vz -= fz/a1.mass
                     if not a2.is_dragged: a2.vx += fx/a2.mass; a2.vy += fy/a2.mass; a2.vz += fz/a2.mass
 
+        # VSEPR pravidla uhlu
         for a in self.atoms:
             neighbors = []
             for b in self.bonds:
@@ -367,6 +370,7 @@ class Sandbox:
                     if not n1.is_dragged: n1.vx += fx/n1.mass; n1.vy += fy/n1.mass; n1.vz += fz/n1.mass
                     if not n2.is_dragged: n2.vx -= fx/n2.mass; n2.vy -= fy/n2.mass; n2.vz -= fz/n2.mass
 
+        # Stabilizace a pritahovani ve vazbach
         for bond in self.bonds:
             a1, a2 = bond.a1, bond.a2
             dx, dy, dz = a2.x - a1.x, a2.y - a1.y, a2.z - a1.z
@@ -398,6 +402,7 @@ class Sandbox:
 
         if event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1: 
+                
                 if self.show_analysis:
                     self.show_analysis = False
                     return
@@ -425,14 +430,14 @@ class Sandbox:
                     world_x, world_y = mx + self.cam_x, my + self.cam_y
                     
                     if self.ptable_open:
-                        ptable_rect = pygame.Rect(160, 10, 800, 600)
+                        ptable_rect = pygame.Rect(180, 15, 800, 600)
                         if ptable_rect.collidepoint(mx, my):
                             cols = 6
                             w, h = 110, 80
                             keys = list(ELEMENTS.keys())
                             for i, key in enumerate(keys):
-                                rx = 180 + (i % cols) * (w + 10)
-                                ry = 20 + (i // cols) * (h + 10)
+                                rx = 200 + (i % cols) * (w + 10)
+                                ry = 25 + (i // cols) * (h + 10)
                                 if pygame.Rect(rx, ry, w, h).collidepoint(mx, my):
                                     self.selected_symbol = key
                                     self.ptable_open = False
@@ -470,6 +475,7 @@ class Sandbox:
                 elif self.mode == MODE_3D:
                     self.panning = True 
             
+            # Prave tlacitko mysi / nebo delsi stisk na tabletu
             elif event.button == 3 and self.mode == MODE_2D:
                 if self.hovered_atom:
                     self.bonds = [b for b in self.bonds if b.a1 != self.hovered_atom and b.a2 != self.hovered_atom]
@@ -479,7 +485,8 @@ class Sandbox:
                     to_remove = None
                     for b in self.bonds:
                         dist = point_line_distance(world_x, world_y, b.a1.x, b.a1.y, b.a2.x, b.a2.y)
-                        if dist < 25:
+                        # Zvetsena zona pro mazani vazeb na tabletu
+                        if dist < 40:
                             to_remove = b; break
                     if to_remove: self.bonds.remove(to_remove)
 
@@ -538,16 +545,15 @@ class Sandbox:
             if self.mode == MODE_2D:
                 wx, wy = mx + self.cam_x, my + self.cam_y
                 for a in reversed(self.atoms):
-                    if math.hypot(a.x - wx, a.y - wy) <= a.radius + 10:
+                    # Vetsi hitbox pro snadnejsi vyber na tabletu
+                    if math.hypot(a.x - wx, a.y - wy) <= a.radius + 20:
                         self.hovered_atom = a; break
 
         self.last_mouse_pos = (mx, my)
 
     def draw(self, surface, time):
-        # 1. Vykresleni statickeho krasneho pozadi
         surface.blit(self.static_bg, (0, 0))
         
-        # 2. Vykresleni mrizky (pohybuje se podle kamery)
         if self.mode == MODE_2D:
             gs = 100
             for x in range(int(-self.cam_x % gs), WIDTH, gs): 
@@ -567,7 +573,6 @@ class Sandbox:
 
         render_queue.sort(key=lambda item: item['z'], reverse=True)
 
-        # Optimalizace pro web: Nepouzivame novy povrch, jen procistime ten stavajici
         self.alpha_surface.fill((0, 0, 0, 0))
 
         for item in render_queue:
@@ -575,7 +580,6 @@ class Sandbox:
                 b = item['obj']
                 x1, y1, x2, y2 = item['sx1'], item['sy1'], item['sx2'], item['sy2']
                 
-                # Prumet orbitalu nakreslime do alfa vrstvy
                 pygame.draw.line(self.alpha_surface, ORBITAL_COLOR, (x1, y1), (x2, y2), 20)
                 
                 dx, dy = x2 - x1, y2 - y1
@@ -625,7 +629,6 @@ class Sandbox:
                     en_txt = font_tiny.render(f"{a.en:.2f}", True, get_en_color(a.en))
                     surface.blit(en_txt, (sx - en_txt.get_width()//2, sy + r + 2))
                     
-        # Slouceni polopruhledne vrstvy na obrazovku
         surface.blit(self.alpha_surface, (0, 0))
 
         if self.mode == MODE_2D and self.current_tool == TOOL_ADD_BOND and self.bonding_start_atom:
@@ -635,33 +638,33 @@ class Sandbox:
 
         # UI
         if self.mode == MODE_2D:
-            pygame.draw.rect(surface, UI_BG, (0, 0, 160, HEIGHT))
-            pygame.draw.line(surface, (70,80,95), (160, 0), (160, HEIGHT), 2)
+            pygame.draw.rect(surface, UI_BG, (0, 0, 180, HEIGHT))
+            pygame.draw.line(surface, (70,80,95), (180, 0), (180, HEIGHT), 2)
             
             mx, my = pygame.mouse.get_pos()
             for i, rect in enumerate(self.ui_buttons):
                 color = UI_ACTIVE if self.current_tool == self.ui_tools[i] else (UI_HOVER if rect.collidepoint(mx, my) else (40, 45, 55))
                 pygame.draw.rect(surface, color, rect, border_radius=8)
-                surface.blit(font_medium.render(self.ui_labels[i], True, TEXT_COLOR), (rect.x + 10, rect.y + 8))
+                surface.blit(font_medium.render(self.ui_labels[i], True, TEXT_COLOR), (rect.x + 15, rect.y + 15))
 
             color = UI_ACTIVE if self.ptable_open else (UI_HOVER if self.btn_ptable.collidepoint(mx, my) else (40, 45, 55))
             pygame.draw.rect(surface, color, self.btn_ptable, border_radius=8)
             
             edata = ELEMENTS[self.selected_symbol]
-            pygame.draw.circle(surface, edata[0], (self.btn_ptable.x + 30, self.btn_ptable.y + 30), 15)
-            surface.blit(font_medium.render("Aktivni:", True, (150,150,150)), (70, 225))
-            surface.blit(font_large.render(self.selected_symbol, True, TEXT_COLOR), (70, 240))
-            surface.blit(font_small.render(f"Valence: {edata[1]}", True, (180,180,180)), (20, 280))
-            surface.blit(font_small.render(f"EN: {edata[5]:.2f}", True, get_en_color(edata[5])), (20, 300))
+            pygame.draw.circle(surface, edata[0], (self.btn_ptable.x + 40, self.btn_ptable.y + 35), 18)
+            surface.blit(font_medium.render("Aktivni:", True, (150,150,150)), (80, 270))
+            surface.blit(font_large.render(self.selected_symbol, True, TEXT_COLOR), (80, 290))
+            surface.blit(font_small.render(f"Valence: {edata[1]}", True, (180,180,180)), (25, 320))
+            surface.blit(font_small.render(f"EN: {edata[5]:.2f}", True, get_en_color(edata[5])), (25, 340))
 
             if self.ptable_open:
-                ptable_rect = pygame.Rect(160, 10, 800, 600)
+                ptable_rect = pygame.Rect(190, 15, 800, 600)
                 pygame.draw.rect(surface, UI_BG, ptable_rect, border_radius=10)
                 pygame.draw.rect(surface, (70,80,95), ptable_rect, width=2, border_radius=10)
                 cols = 6
                 for i, (sym, data) in enumerate(ELEMENTS.items()):
-                    rx = 180 + (i % cols) * 120
-                    ry = 20 + (i // cols) * 90
+                    rx = 200 + (i % cols) * 120
+                    ry = 25 + (i // cols) * 90
                     rect = pygame.Rect(rx, ry, 110, 80)
                     bg_col = UI_ACTIVE if sym == self.selected_symbol else (UI_HOVER if rect.collidepoint(mx, my) else (40, 45, 55))
                     pygame.draw.rect(surface, bg_col, rect, border_radius=5)
@@ -670,23 +673,22 @@ class Sandbox:
                     surface.blit(font_small.render(data[3], True, (180,180,180)), (rx + 10, ry + 40))
                     surface.blit(font_small.render(f"EN: {data[5]:.2f}", True, get_en_color(data[5])), (rx + 10, ry + 55))
 
-        # Leve spodni tlacitka
         mx, my = pygame.mouse.get_pos()
         
         pygame.draw.rect(surface, (100, 70, 160) if self.mode == MODE_3D else (60, 110, 180), self.btn_mode, border_radius=8)
-        mode_txt = "-> Zpet do 2D" if self.mode == MODE_3D else "-> 3D Prohlidka"
-        surface.blit(font_medium.render(mode_txt, True, WHITE), (self.btn_mode.x + 10, self.btn_mode.y + 12))
+        mode_txt = "Zpet do 2D" if self.mode == MODE_3D else "3D Prohlidka"
+        surface.blit(font_medium.render(mode_txt, True, WHITE), (self.btn_mode.x + 15, self.btn_mode.y + 15))
 
         el_col = (70, 160, 110) if self.show_electrons else (160, 70, 70)
         pygame.draw.rect(surface, el_col, self.btn_electrons, border_radius=8)
         el_txt = "Elektrony ON" if self.show_electrons else "Elektrony OFF"
-        surface.blit(font_medium.render(el_txt, True, WHITE), (self.btn_electrons.x + 10, self.btn_electrons.y + 12))
+        surface.blit(font_medium.render(el_txt, True, WHITE), (self.btn_electrons.x + 15, self.btn_electrons.y + 15))
 
         pygame.draw.rect(surface, (160, 120, 60), self.btn_analysis, border_radius=8)
-        surface.blit(font_medium.render("Analyza Molekuly", True, WHITE), (self.btn_analysis.x + 5, self.btn_analysis.y + 12))
+        surface.blit(font_medium.render("Analyza", True, WHITE), (self.btn_analysis.x + 15, self.btn_analysis.y + 15))
 
         if self.mode == MODE_3D:
-            surface.blit(font_large.render("3D Prohlidka (Tazenim otacej)", True, (150, 200, 255)), (180, 20))
+            surface.blit(font_large.render("3D Prohlidka (Tazenim po plose otacej)", True, (150, 200, 255)), (200, 20))
 
         if self.show_analysis:
             overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
@@ -713,21 +715,21 @@ class Sandbox:
 
         if self.hovered_atom and self.mode == MODE_2D and not self.show_analysis:
             ha = self.hovered_atom
-            info_h = 110
-            pygame.draw.rect(surface, (20, 25, 35), (WIDTH - 280, 20, 260, info_h), border_radius=10)
-            pygame.draw.rect(surface, (100, 150, 255), (WIDTH - 280, 20, 260, info_h), width=2, border_radius=10)
+            info_h = 120
+            pygame.draw.rect(surface, (20, 25, 35), (WIDTH - 290, 20, 270, info_h), border_radius=10)
+            pygame.draw.rect(surface, (100, 150, 255), (WIDTH - 290, 20, 270, info_h), width=2, border_radius=10)
             
-            surface.blit(font_element.render(f"Atom: {ha.symbol}", True, ha.color), (WIDTH - 260, 30))
-            surface.blit(font_small.render(f"Hybridizace: {ha.hybridization}", True, WHITE), (WIDTH - 260, 60))
-            surface.blit(font_small.render(f"Volne pary: {ha.lone_pairs}", True, WHITE), (WIDTH - 260, 80))
-            surface.blit(font_small.render(f"Delta naboj: {ha.delta_charge:+.2f}", True, WHITE), (WIDTH - 260, 100))
+            surface.blit(font_element.render(f"Atom: {ha.symbol}", True, ha.color), (WIDTH - 270, 30))
+            surface.blit(font_medium.render(f"Hybridizace: {ha.hybridization}", True, WHITE), (WIDTH - 270, 60))
+            surface.blit(font_small.render(f"Volne pary: {ha.lone_pairs}", True, WHITE), (WIDTH - 270, 85))
+            surface.blit(font_small.render(f"Delta naboj: {ha.delta_charge:+.2f}", True, WHITE), (WIDTH - 270, 105))
 
         if self.alert_timer > 0:
             alert_surf = font_alert.render(self.alert_message, True, ALERT_COLOR)
-            bg_rect = pygame.Rect(WIDTH//2 - alert_surf.get_width()//2 - 10, 30, alert_surf.get_width() + 20, 40)
+            bg_rect = pygame.Rect(WIDTH//2 - alert_surf.get_width()//2 - 20, 30, alert_surf.get_width() + 40, 50)
             pygame.draw.rect(surface, (30, 20, 20), bg_rect, border_radius=8)
             pygame.draw.rect(surface, ALERT_COLOR, bg_rect, width=2, border_radius=8)
-            surface.blit(alert_surf, (WIDTH//2 - alert_surf.get_width()//2, 35))
+            surface.blit(alert_surf, (WIDTH//2 - alert_surf.get_width()//2, 40))
             self.alert_timer -= 1
 
 async def main():
@@ -746,7 +748,7 @@ async def main():
         pygame.display.flip()
         clock.tick(60)
         
-        # Tento radek udrzuje web a prohlizec pri zivote
+        # Tohle brani zamrznuti ve webovem prohlizeci
         await asyncio.sleep(0)
 
 if __name__ == "__main__":
