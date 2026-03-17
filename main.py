@@ -2,6 +2,7 @@ import pygame
 import math
 import sys
 import random
+import asyncio
 
 pygame.init()
 
@@ -10,12 +11,12 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("ChemSandbox - 3D Kvantovy Model & VSEPR Hybridizace")
 clock = pygame.time.Clock()
 
-font_tiny = pygame.font.SysFont("segoeui", 12)
-font_small = pygame.font.SysFont("segoeui", 14)
-font_medium = pygame.font.SysFont("segoeui", 18)
-font_large = pygame.font.SysFont("segoeui", 28)
-font_element = pygame.font.SysFont("segoeui", 22)
-font_alert = pygame.font.SysFont("segoeui", 24)
+font_tiny = pygame.font.Font(None, 14)
+font_small = pygame.font.Font(None, 16)
+font_medium = pygame.font.Font(None, 20)
+font_large = pygame.font.Font(None, 30)
+font_element = pygame.font.Font(None, 24)
+font_alert = pygame.font.Font(None, 26)
 
 BG_COLOR = (20, 25, 30)
 GRID_COLOR = (35, 40, 45)
@@ -267,7 +268,6 @@ class Sandbox:
     def apply_physics(self):
         self.calculate_chemistry()
 
-        # 1. Elektromagneticke odpuzovani pro atomy, ktere jsou u sebe moc blizko
         for i in range(len(self.atoms)):
             for j in range(i+1, len(self.atoms)):
                 a1, a2 = self.atoms[i], self.atoms[j]
@@ -278,13 +278,11 @@ class Sandbox:
                 min_dist = a1.radius + a2.radius + 30
                 force = 0.0
                 
-                # ZDE BYL BUG: Znamenko je nyni opraveno zaporne -> kladne, aby se atomy opravdu odpuzovaly.
                 if dist < min_dist:
                     repulsion = (min_dist / dist)**2
                     force = (repulsion - 1.0) * 1.5 
-                    if force > 15.0: force = 15.0 # Bezpecnostni zamek, zabrani vystreleni do vesmiru
+                    if force > 15.0: force = 15.0 
                     
-                # Jemna elektrostatika z naboje
                 charge_factor = a1.delta_charge * a2.delta_charge * 150
                 if abs(charge_factor) > 0.01 and dist < min_dist + 150:
                     c_force = charge_factor / dist
@@ -297,7 +295,6 @@ class Sandbox:
                     if not a1.is_dragged: a1.vx -= fx/a1.mass; a1.vy -= fy/a1.mass; a1.vz -= fz/a1.mass
                     if not a2.is_dragged: a2.vx += fx/a2.mass; a2.vy += fy/a2.mass; a2.vz += fz/a2.mass
 
-        # 2. VSEPR - Uhlove usporadani na zaklade magneticke interference paru
         for a in self.atoms:
             neighbors = []
             for b in self.bonds:
@@ -331,7 +328,6 @@ class Sandbox:
                     diff = dist - ideal_dist
                     force = diff * 0.02
                     
-                    # Omezeni maximalni sily u VSEPR
                     if force > 3.0: force = 3.0
                     if force < -3.0: force = -3.0
                     
@@ -340,7 +336,6 @@ class Sandbox:
                     if not n1.is_dragged: n1.vx += fx/n1.mass; n1.vy += fy/n1.mass; n1.vz += fz/n1.mass
                     if not n2.is_dragged: n2.vx -= fx/n2.mass; n2.vy -= fy/n2.mass; n2.vz -= fz/n2.mass
 
-        # 3. Elektromagneticke interakce vazeb
         for bond in self.bonds:
             a1, a2 = bond.a1, bond.a2
             dx, dy, dz = a2.x - a1.x, a2.y - a1.y, a2.z - a1.z
@@ -350,7 +345,6 @@ class Sandbox:
             ratio = dist / bond.rest_length
             force = (ratio - 1.0 / (ratio**2)) * 2.0
             
-            # Omezeni maximalni a minimalni sily ve vazbe
             if force > 8.0: force = 8.0
             if force < -8.0: force = -8.0
             
@@ -359,7 +353,6 @@ class Sandbox:
             if not a1.is_dragged: a1.vx += fx/a1.mass; a1.vy += fy/a1.mass; a1.vz += fz/a1.mass
             if not a2.is_dragged: a2.vx -= fx/a2.mass; a2.vy -= fy/a2.mass; a2.vz -= fz/a2.mass
 
-        # 4. Pohyb
         for a in self.atoms:
             if not a.is_dragged:
                 a.x += a.vx; a.y += a.vy; a.z += a.vz
@@ -367,7 +360,6 @@ class Sandbox:
             if self.mode == MODE_2D and not a.is_dragged:
                 a.z *= 0.95 
                 
-            # Jemnejsi zpomalovani, vraceno na 0.8 pro lepsi stabilitu proti roztreseni
             a.vx *= 0.8; a.vy *= 0.8; a.vz *= 0.8
 
     def handle_event(self, event):
@@ -376,7 +368,6 @@ class Sandbox:
         if event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1: 
                 
-                # Pokud je otevrene analyzacni okno, jakekoliv kliknuti ho zavre
                 if self.show_analysis:
                     self.show_analysis = False
                     return
@@ -604,7 +595,6 @@ class Sandbox:
             sx, sy, _, _ = self.bonding_start_atom.get_screen_pos(self.cam_x, self.cam_y, self.mode, 0, 0)
             pygame.draw.line(surface, (255,255,255), (sx, sy), (mx, my), 2)
 
-        # UI
         if self.mode == MODE_2D:
             pygame.draw.rect(surface, UI_BG, (0, 0, 160, HEIGHT))
             pygame.draw.line(surface, (70,75,80), (160, 0), (160, HEIGHT), 2)
@@ -641,29 +631,23 @@ class Sandbox:
                     surface.blit(font_small.render(data[3], True, (180,180,180)), (rx + 10, ry + 40))
                     surface.blit(font_small.render(f"EN: {data[5]:.2f}", True, get_en_color(data[5])), (rx + 10, ry + 55))
 
-        # Tlacitka ve spodnim sloupci
         mx, my = pygame.mouse.get_pos()
         
-        # Tlacitko 2D/3D Mode
         pygame.draw.rect(surface, (100, 50, 150) if self.mode == MODE_3D else (50, 100, 150), self.btn_mode, border_radius=8)
         mode_txt = "-> Zpet do 2D" if self.mode == MODE_3D else "-> 3D Prohlidka"
         surface.blit(font_medium.render(mode_txt, True, WHITE), (self.btn_mode.x + 10, self.btn_mode.y + 12))
 
-        # Tlacitko pro vypnuti/zapnuti elektronu
         el_col = (50, 150, 100) if self.show_electrons else (150, 50, 50)
         pygame.draw.rect(surface, el_col, self.btn_electrons, border_radius=8)
         el_txt = "Elektrony ON" if self.show_electrons else "Elektrony OFF"
         surface.blit(font_medium.render(el_txt, True, WHITE), (self.btn_electrons.x + 10, self.btn_electrons.y + 12))
 
-        # Tlacitko pro analyzu
         pygame.draw.rect(surface, (150, 100, 50), self.btn_analysis, border_radius=8)
         surface.blit(font_medium.render("Analyza Molekuly", True, WHITE), (self.btn_analysis.x + 5, self.btn_analysis.y + 12))
-
 
         if self.mode == MODE_3D:
             surface.blit(font_large.render("3D Prohlidka (Tazenim otacej)", True, (150, 200, 255)), (180, 20))
 
-        # Okno analyzy molekuly
         if self.show_analysis:
             overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, 180))
@@ -687,7 +671,6 @@ class Sandbox:
             close_txt = font_medium.render("Kliknutim kamkoliv okno zavres", True, (150, 150, 150))
             surface.blit(close_txt, (win_x + win_w//2 - close_txt.get_width()//2, win_y + win_h - 40))
 
-        # Hover Info Panel o Atomu (Kvantova data)
         if self.hovered_atom and self.mode == MODE_2D and not self.show_analysis:
             ha = self.hovered_atom
             info_h = 100
@@ -707,7 +690,7 @@ class Sandbox:
             surface.blit(alert_surf, (WIDTH//2 - alert_surf.get_width()//2, 35))
             self.alert_timer -= 1
 
-def main():
+async def main():
     sandbox = Sandbox()
     time = 0.0
     while True:
@@ -722,6 +705,7 @@ def main():
 
         pygame.display.flip()
         clock.tick(60)
+        await asyncio.sleep(0)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
